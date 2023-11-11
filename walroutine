@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Предварительная очистка
+rm -fr walroutine*
+
+# Некоторые переменные
+WALDIR=/home/postgres/shevchenko/05/data/pg_wal
+COUNTER=1
+#THREADS=`cat /proc/cpuinfo | grep processor | tail -1 | awk '{print $NF}'`
+THREADS=1
+
+# Готовим список файлов
+ls -1 $WALDIR | grep ready | awk -F '/' '{print $NF}' > ~/list
+
+# Считаем количество элементов в нём
+FILES_TO_DO=`wc -l ~/list | awk '{print $1}'`
+PIECES=$(( FILES_TO_DO / THREADS ))
+
+# Разбиваем список на куски, каждый будет начинаться с walroutine
+split -l $PIECES ~/list walroutine
+
+# ПОГНАЛИ
+for LISTFILE in walroutine* ; do
+echo Стартует поток $COUNTER
+
+# Запускаем потоки, каждый из них удалит свой список файлов по завершению
+time for WALFILE in `cat $LISTFILE` ; do mv $WALDIR/$WALFILE $WALDIR/archive_status/${WALFILE%%.ready}.done ; done && rm $LISTFILE &
+
+(( COUNTER++ ))
+done
+
+# Ждём пока подпроцессы завершатся
+while [[ `ls walroutine* 2> /dev/null` ]] ; do echo Работа идёт ; sleep 5 ; done
+
+echo Копирование закончено
